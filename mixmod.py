@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+
+# Python implementation of a Bayesian simplicial mixture of
+# multi-variate t distributions. The class implements methods
+# for generating simulated data and estimating the parameters
+# of the model.
+# 
+# Simplicial mixture models are typically used in text-based
+# information retrieval, e.g. latent Dirichlet allocation (LDA).
+# The LDA model allocates topics to a set of documents within a
+# corpus based on their word statistics. Here, the documents are
+# replaced by continuous data. Each set of data originates from
+# a simplicial mixture of multi-variate t distributions with set-
+# specific mixing proportions. An additional layer of latent
+# variables interface the documents' topics and words.
 
 import copy,math,numpy
 
