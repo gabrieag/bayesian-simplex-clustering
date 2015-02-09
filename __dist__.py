@@ -167,7 +167,7 @@ class dirich(object):
             # the divergence is infinite.
             return numpy.inf
 
-    def stat(self,evid):
+    def stat(self,evidence):
 
         dim=self.__dim__
 
@@ -178,7 +178,7 @@ class dirich(object):
         stat.pi=numpy.zeros(dim)
         stat.alpha=0.0
 
-        for prob in evid:
+        for prob in evidence:
 
             assert numpy.ndim(prob)==2
             dim,size=numpy.shape(prob)
@@ -472,7 +472,7 @@ class gaussgamma(object):
             # the divergence is infinite.
             return numpy.inf
 
-    def stat(self,evid,weighted=False,scaled=False):
+    def stat(self,evidence,weighted=False,scaled=False):
 
         dim=self.__dim__
 
@@ -491,7 +491,7 @@ class gaussgamma(object):
         # sufficient statistics.
         if not weighted:
             if not scaled:
-                for obs in evid:
+                for obs in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
@@ -507,7 +507,7 @@ class gaussgamma(object):
                     stat.eta+=size
 
             else:
-                for obs,scale in evid:
+                for obs,scale in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
@@ -527,7 +527,7 @@ class gaussgamma(object):
 
         else:
             if scaled:
-                for obs,weight,scale in evid:
+                for obs,weight,scale in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
@@ -548,7 +548,7 @@ class gaussgamma(object):
                     stat.eta+=numpy.sum(scale)
 
             else:
-                for obs,weight in evid:
+                for obs,weight in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
@@ -892,7 +892,7 @@ class gausswish(object):
             # the divergence is infinite.
             return numpy.inf
 
-    def stat(self,evid,weighted=False,scaled=False):
+    def stat(self,evidence,weighted=False,scaled=False):
 
         dim=self.__dim__
 
@@ -911,7 +911,7 @@ class gausswish(object):
         # sufficient statistics.
         if not weighted:
             if not scaled:
-                for obs in evid:
+                for obs in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
@@ -930,7 +930,7 @@ class gausswish(object):
                     stat.eta+=size
 
             else:
-                for obs,scale in evid:
+                for obs,scale in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
@@ -952,7 +952,7 @@ class gausswish(object):
 
         else:
             if scaled:
-                for obs,weight,scale in evid:
+                for obs,weight,scale in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
@@ -975,7 +975,7 @@ class gausswish(object):
                     stat.eta+=numpy.sum(scale)
 
             else:
-                for obs,weight in evid:
+                for obs,weight in evidence:
 
                     assert numpy.ndim(obs)==2
                     dim,size=numpy.shape(obs)
