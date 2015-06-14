@@ -1,4 +1,4 @@
-bayesian-simplicial-clustering
+Bayesian simplicial clustering
 ==============================
 
 The Bayesian simplicial mixture (BSM) model implements simulation and inference algorithms for a simplicial mixture model with component multi-variate *t* distributions.
