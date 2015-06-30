@@ -22,18 +22,11 @@ from numpy import random
 
 # Import the module-specific classes and functions.
 from __dist__ import dirich as Dirichlet
-from __dist__ import gaussgamma as GaussGamma
+from __dist__ import gaussgamma as GaussInvGamma
 from __dist__ import gausswish as GaussInvWishart
 from __util__ import isconv, unique
 
 class model():
-
-    # Define a structure-like container
-    # class for storing the distributions
-    # over the model parameters.
-    class paramdist:
-        groups = None
-        components = None
 
     def __init__(self, num_groups, num_components, num_dimensions, 
         all_correlations = True):
@@ -44,97 +37,102 @@ class model():
         assert num_groups > 0 and num_components > 0 and num_dimensions > 0
 
         self.__size = num_groups, num_components, num_dimensions
-        self.__prior = model.paramdist()
 
-        dist = GaussInvWishart if all_correlations else GaussGamma
+        comp_dist = GaussInvWishart if all_correlations else GaussInvGamma
 
         # Initialize the prior distributions over the model parameters.
-        self.__prior.groups = [Dirichlet(num_components) for i in range(num_groups)]
-        self.__prior.components = [dist(num_dimensions) for i in range(num_components)]
+        self.__prior = {
+            'group': [Dirichlet(num_components) for i in range(num_groups)],
+            'comp': [comp_dist(num_dimensions) for i in range(num_components)]}
 
         self.__posterior = None
 
     @property
     def groups(self):
 
-        # By default, select the posterior distributions over the model
-        # parameters. If they are not initialized, then select the prior.
-        dist = self.__posterior if self.__posterior is not None else self.__prior
-
-        return dist.groups
+        # By default, return the posterior distributions over the model's
+        # group-specific parameters. If these are not initialized, then return
+        # the posterior instead.
+        return self.__posterior['group'] if self.__posterior is not None\
+            else self.__prior['group']
 
     @groups.setter
     def groups(self, *groups):
 
         num_groups, num_components, num_dimensions = self.__size
 
-        # Check that the number of
-        # arguments is consistent with
-        # the size of the model.
+        # The number of groups should be consistent with the size of the model.
+        # Furthermore, each group should be a Dirichlet distribution object.
         assert len(groups) == num_groups
-
-        # Check that the arguments are Dirichlet distributions.
         assert all(isinstance(group, Dirichlet) for group in groups)
 
-        # Set these as the prior distributions
-        # over the group-specific parameters.
-        self.__prior.groups = groups
+        if groups != self.__prior['group']:
 
-        self.__posterior = None
+            # The input arguments are a prior distribution over the group-
+            # specific parameters of the model.
+            self.__prior['group'] = groups
+
+            # Modifying the prior over the model parameters invalidates the
+            # posterior.
+            self.__posterior = None
 
     @property
     def components(self):
 
-        # By default, select the posterior distributions over the model
-        # parameters. If they are not initialized, then select the prior.
-        dist = self.__posterior if self.__posterior is not None else self.__prior
-
-        return dist.components
+        # By default, return the posterior distributions over the model's
+        # component-specific parameters. If these are not initialized, then
+        # return the posterior instead.
+        return self.__posterior['comp'] if self.__posterior is not None\
+            else self.__prior['comp']
 
     @components.setter
     def components(self, *components):
 
         num_groups, num_components, num_dimensions = self.__size
 
-        # Check that the number of
-        # arguments is consistent with
-        # the size of the model.
+        # The number of components should be consistent with the size of the
+        # model. Furthermore, each component should be either a Gauss-inverse-
+        # Gamma or a Gauss-inverse-Wishart distribution object.
         assert len(components) == num_components
+        assert all(isinstance(component, GaussInvGamma) or
+            isinstance(component, GaussInvWishart) for component in components)
 
-        # Check that the arguments are either Gauss-Gamma or Gauss-Wishart distributions.
-        assert all(isinstance(component, GaussGamma) or isinstance(component, GaussInvWishart) for component in components)
+        if components != self.__prior['components']:
 
-        # Set these as the prior distributions
-        # over the component-specific parameters.
-        self.__prior.components = components
+            # The input arguments is a prior distribution over the component-
+            # specific parameters of the model.
+            self.__prior['comp'] = components
 
-        self.__posterior = None
+            # Modifying the prior over the model parameters invalidates the
+            # posterior.
+            self.__posterior = None
 
-    def simulate(self, *size, alpha = np.inf, nu = np.inf):
+    def simulate(self, *sizes, alpha = np.inf, nu = np.inf):
 
-        # Check that the sizes and hyper-parameters are valid.
-        assert all(n > 0 for n in size) and alpha > 0.0 and nu > 0.0
+        # The size of each of the batches should be strictly positive, and so
+        # should the model hyper-parameters.
+        assert all(n > 0 for n in sizes) and alpha > 0.0 and nu > 0.0
 
         num_groups, num_components, num_dimensions = self.__size
 
-        # By default, select the posterior distributions over the model
-        # parameters. If they are not initialized, then select the prior.
-        dist = self.__posterior if self.__posterior is not None else self.__prior
+        # By default, take the the posterior distributions over the model
+        # parameters. If they haven't been initialized, then select the prior.
+        comp_dist = self.__posterior if self.__posterior is not None\
+            else self.__prior
 
-        # Create a distribution over
-        # the sample-specific parameters.
+        # Create a distribution over batch-specific parameters.
         prop_param = Dirichlet(num_groups, alpha = alpha)
 
         # Generate the model-specific parameters.
-        emiss_param = [p.rand() for p in dist.groups]
-        loc_param, disp_param = zip(*[p.rand() for p in dist.components])
+        emiss_param = [p.rand() for p in comp_dist['group']]
+        loc_param, disp_param = zip(*[p.rand() for p in comp_dist['comp']])
 
         group_ind, comp_ind, obs_weight, obs = [], [], [], []
-
-        for i, num_points in enumerate(size):
+        for i, num_points in enumerate(sizes):
 
             # Generate the group indices.
-            group_ind.append(prop_param.rand().cumsum().searchsorted(random.rand(num_points)))
+            group_ind.append(prop_param.rand().cumsum().searchsorted(
+                random.rand(num_points)))
 
             comp_ind.append(np.zeros(num_points, dtype=int))
             obs_weight.append(np.zeros(num_points))
@@ -142,19 +140,23 @@ class model():
 
             # Generate the component indices.
             for j, ind in unique(group_ind[i]):
-                comp_ind[i][ind] = emiss_param[j].cumsum().searchsorted(random.rand(len(ind)))
+                comp_ind[i][ind] = emiss_param[j].cumsum().searchsorted(
+                    random.rand(len(ind)))
 
             # Generate the observation weights.
             if np.isfinite(nu):
-                obs_weight[i] = random.gamma(nu/2.0, size = num_points)/(nu/2.0)
+                obs_weight[i] = random.gamma(nu/2.0, size = num_points)\
+                    /(nu/2.0)
             else:
                 obs_weight[i][:] = 1.0
 
             # Generate the observations.
             for j, ind in unique(comp_ind[i]):
                 scale = np.sqrt(obs_weight[i][ind])
-                obs[i][:, ind] = loc_param[j][:, np.newaxis] + np.dot(linalg.cholesky(disp_param[j]), 
-                    random.randn(num_dimensions, len(ind)))/scale[np.newaxis, :]
+                obs[i][:, ind] = loc_param[j][:, np.newaxis] +\
+                    np.dot(linalg.cholesky(disp_param[j]), 
+                        random.randn(num_dimensions, len(ind)))\
+                            /scale[np.newaxis, :]
 
         return group_ind, comp_ind, obs_weight, obs
 
@@ -165,34 +167,31 @@ class model():
         num_groups, num_components, num_dimensions = self.__size
 
         # Check that there the arguments are consistent with the size of the model.
-        assert all(np.ndim(x) == 2 and d == num_dimensions for x in observations for d, n in (x.shape,))
+        assert all(np.ndim(x) == 2 and m == num_dimensions for x in observations for m, n in (x.shape,))
 
-        num_points = [n for x in observations for d, n in (x.shape,)]
+        num_points = [n for x in observations for m, n in (x.shape,)]
 
         prior = self.__prior
         posterior = self.__posterior
 
-        num_samples = len(observations)
+        num_batches = len(observations)
 
         if posterior is None:
 
-            posterior = model.paramdist()
-
             # Initialize the posterior distributions
             # over the model-specific parameters.
-            posterior.groups = copy.deepcopy(prior.groups)
-            posterior.components = copy.deepcopy(prior.components)
+            posterior = copy.deepcopy(prior)
 
-        # Initialize the distributions over the sample-specific parameters.
-        prior.samp = [Dirichlet(num_groups, alpha = alpha) for i in range(num_samples)]
-        posterior.samp = [Dirichlet(num_groups, alpha = alpha) for i in range(num_samples)]
+        # Initialize the distributions over the batch-specific parameters.
+        prior['batch'] = [Dirichlet(num_groups, alpha = alpha) for i in range(num_batches)]
+        posterior['batch'] = [Dirichlet(num_groups, alpha = alpha) for i in range(num_batches)]
 
         if init_posterior:
 
             # Initialize the distributions over
-            # the sample-specific parameters.
-            for i in range(num_samples):
-                posterior.samp[i].alpha += num_points[i]
+            # the batch-specific parameters.
+            for i in range(num_batches):
+                posterior['batch'][i].alpha += num_points[i]
 
             a = float(sum(num_points))/float(num_groups)
             b = float(sum(num_points))/float(num_components)
@@ -200,13 +199,13 @@ class model():
             # Initialize the distributions over
             # the model-specific parameters.
             for i in range(num_groups):
-                posterior.groups[i].alpha += a
+                posterior['group'][i].alpha += a
             for i in range(num_components):
-                posterior.components[i].omega += b
-                posterior.components[i].eta += b
+                posterior['comp'][i].omega += b
+                posterior['comp'][i].eta += b
 
-        probabilities = [None]*num_samples
-        weights = [None]*num_samples
+        probabilities = [None]*num_batches
+        weights = [None]*num_batches
 
         lower_bound = []
 
@@ -214,7 +213,7 @@ class model():
 
             lower_bound.append(0.0)
 
-            for j in range(num_samples):
+            for j in range(num_batches):
 
                 log_likelihood = np.zeros([num_components, num_points[j]])
 
@@ -225,11 +224,11 @@ class model():
                 # of the observations, and the expected
                 # value of the weights.
                 for k in range(num_components):
-                    log_likelihood[k, :], weights[j][k, :] = posterior.components[k].loglik(observations[j], nu = nu)
+                    log_likelihood[k, :], weights[j][k, :] = posterior['comp'][k].loglik(observations[j], nu = nu)
 
                 # Compute the joint log-probabilities.
-                probabilities[j] = posterior.samp[j].loglik().reshape([num_groups, 1, 1]) \
-                    + np.reshape([q.loglik() for q in posterior.groups], [num_groups, num_components, 1]) \
+                probabilities[j] = posterior['batch'][j].loglik().reshape([num_groups, 1, 1]) \
+                    + np.reshape([q.loglik() for q in posterior['group']], [num_groups, num_components, 1]) \
                     + log_likelihood[np.newaxis, :, :]
 
                 norm_constant = probabilities[j].max(axis = 0).max(axis = 0)
@@ -252,39 +251,39 @@ class model():
                 lower_bound[i] += norm_constant.sum()
 
             # Evaluate the lower bound on the marginal log-likelihood of the data.
-            lower_bound[i] -= sum(q.div(p) for p, q in zip(prior.samp, posterior.samp))\
-                + sum(q.div(p) for p, q in zip(prior.groups, posterior.groups))\
-                + sum(q.div(p) for p, q in zip(prior.components, posterior.components))
+            lower_bound[i] -= sum(q.div(p) for p, q in zip(prior['batch'], posterior['batch']))\
+                + sum(q.div(p) for p, q in zip(prior['group'], posterior['group']))\
+                + sum(q.div(p) for p, q in zip(prior['comp'], posterior['comp']))
 
-            for j in range(num_samples):
+            for j in range(num_batches):
 
                 # Accumulate the expected sufficient statistics.
-                statistics = posterior.samp[j].stat([probabilities[j].sum(axis = 1)])
+                statistics = posterior['batch'][j].stat([probabilities[j].sum(axis = 1)])
 
                 # Update the posterior distributions
-                # over the sample-specific parameters.
-                posterior.samp[j].copy(prior.samp[j]).update(statistics)
+                # over the batch-specific parameters.
+                posterior['batch'][j].copy(prior['batch'][j]).update(statistics)
 
             for j in range(num_groups):
 
                 # Accumulate the expected sufficient statistics.
-                statistics = posterior.groups[j].stat(p[j, :, :] for p in probabilities)
+                statistics = posterior['group'][j].stat(p[j, :, :] for p in probabilities)
 
                 # Update the posterior distributions
                 # over the model-specific group parameters.
-                posterior.groups[j].copy(prior.groups[j]).update(statistics)
+                posterior['group'][j].copy(prior['group'][j]).update(statistics)
 
             scale = [p.sum(axis = 0) for p in probabilities]
 
             for j in range(num_components):
 
                 # Accumulate the expected sufficient statistics.
-                statistics = posterior.components[j].stat(([x, w[j, :], s[j, :]] for x, w, s in 
+                statistics = posterior['comp'][j].stat(([x, w[j, :], s[j, :]] for x, w, s in 
                     zip(observations, weights, scale)), weighted = True, scaled = True)
 
                 # Update the posterior distributions over
                 # the model-specific component parameters.
-                posterior.components[j].copy(prior.components[j]).update(statistics)
+                posterior['comp'][j].copy(prior['comp'][j]).update(statistics)
 
             if i > min(num_iterations) and isconv(rel_tolerance, lower_bound[1:i]):
                 break
