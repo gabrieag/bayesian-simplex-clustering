@@ -148,25 +148,25 @@ mod=model(numgroup,numcomp,numdim)
 
 # Set the hyper-parameters.
 for i in range(numgroup):
-    mod.group[i].alpha=param['prop']
+    mod.groups[i].alpha=param['prop']
 for i in range(numcomp):
-    mod.comp[i].omega=param['loc']
-    mod.comp[i].eta=max(param['disp'],numdim)
+    mod.components[i].omega=param['loc']
+    mod.components[i].eta=max(param['disp'],numdim)
 
 # Generate a collection of sets of complete data.
-group,comp,weight,obs=mod.sim(*[numpoint for i in range(numsamp)],
+groups,components,weight,obs=mod.simulate(*[numpoint for i in range(numsamp)],
                               alpha=param['prop'],nu=param['weight'])
 
 # Create a matrix of scatter plots of the data and color each observation
 # according to the mixture component responsible for generating it.
-fig,axis=scatterplot(numpy.concatenate(obs,axis=1),numpy.concatenate(comp))
+fig,axis=scatterplot(numpy.concatenate(obs,axis=1),numpy.concatenate(components))
 
 fig.canvas.set_window_title('Observations')
 
 # Infer the approximate posterior probabilities and weights.
 prob,weight,bound=mod.infer(*obs,alpha=param['prop'],nu=param['weight'])
 
-loc,scale=zip(*[(mod.comp[k].mu,mod.comp[k].sigma) for k in range(numcomp)])
+loc,scale=zip(*[(mod.components[k].mu,mod.components[k].sigma) for k in range(numcomp)])
 
 # Create another matrix of scatter plots, but
 # this time color the points according to their
